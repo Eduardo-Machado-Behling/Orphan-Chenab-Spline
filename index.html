@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orphan–Chenab Splines</title>
+<meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12151d" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the plots</a>
+<header class="wrap">
+  <h1>The&nbsp;Orphan–&#8288;Chenab stream, traced by natural cubic splines</h1>
+  <p class="deck">The Orphan–Chenab stream is tidal debris from a likely dwarf galaxy, traced over about 200° of sky.
+    Koposov, Erkal, Li et al. (2023) combined Gaia, S⁵ and other spectroscopic surveys to fit the stream’s position and motion
+    along the stream angle φ₁. Those measurements constrained the masses of the Milky Way and the Large Magellanic Cloud.</p>
+  <p class="note">Every curve here is computed in your browser from the knot values the authors released.
+    Move along a panel, or use the φ₁ slider, to pick a point on the stream. Drag the sky to turn it; scroll or pinch to zoom.
+    From the keyboard, focus the sky and use the arrow keys to pan, or Shift + arrow keys to turn it.</p>
+  <noscript><p class="note">The plots are computed by JavaScript, which is turned off. The text below still describes the method and the results.</p></noscript>
+</header>
+
+<main id="main" class="wrap stage">
+  <figure class="plate">
+    <div id="scene" tabindex="0" role="img" aria-label="3-D stream centreline coloured by Galactic-standard-of-rest velocity, dashed across the distance-tracer gap"></div>
+    <div class="key"><span>−200</span><div class="bar"></div><span>+200 km/s</span></div>
+    <p class="caption">Colour shows velocity along the Sun–star sightline in the Galactic standard of rest, corrected for the Sun’s motion. Grey marks zero.
+      The centreline is drawn in Galactocentric kpc (Astropy v4.0) over −80° ≤ φ₁ &lt; 120°.
+      The dashed section interpolates across −10° to +20°, where the study found no likely RR Lyrae distance tracers.
+      The disc (radius 15 kpc) is a sketch that only marks the Milky Way’s plane.</p>
+  </figure>
+  <div class="panels">
+    <div class="readout" translate="no">
+      <output id="r-phi1" for="phi1"></output>
+      <dl><div><dt>φ₂</dt><dd id="r-phi2"></dd></div><div><dt>Distance from Sun</dt><dd id="r-d"></dd></div><div><dt>v_gsr</dt><dd id="r-rv"></dd></div></dl>
+    </div>
+    <label class="scrub">φ₁ <input id="phi1" type="range" min="-90" max="120" step="0.5" value="30"></label>
+    <svg class="panel" id="p-phi2" role="img" translate="no" aria-label="φ₂ against φ₁"></svg>
+    <svg class="panel" id="p-dist" role="img" translate="no" aria-label="Distance from Sun against φ₁, with the RR Lyrae gap shaded"></svg>
+    <svg class="panel" id="p-rv" role="img" translate="no" aria-label="v_gsr against φ₁"></svg>
+    <p class="caption">All three panels share the φ₁ axis in degrees. Dots are the released knot values. Bars run from the 16th to the 84th posterior percentile at each knot.
+      The curves evaluate the natural splines through the knots. The distance plot converts the modulus spline to kpc and shades the RR Lyrae gap.
+      Each curve ends at its own first and last knot, because the spline is never extrapolated.</p>
+    <svg class="panel" id="p-z" role="img" translate="no" aria-label="Second derivatives of the v_gsr spline at its knots"></svg>
+    <p class="caption">This is what the spline solver computes: the curvature z = S″ at each v_gsr knot.
+      At the two ringed ends z is held at 0, which is what makes the spline natural.</p>
+  </div>
+</main>
+
+<section class="wrap prose">
+  <h2>How the spline works</h2>
+  <p>With knots n<sub>i</sub>, values v<sub>i</sub> and spacings h<sub>i</sub> = n<sub>i+1</sub> − n<sub>i</sub>, the interior second derivatives
+    solve a tridiagonal system h<sub>i−1</sub>z<sub>i−1</sub> + 2(h<sub>i−1</sub>+h<sub>i</sub>)z<sub>i</sub> + h<sub>i</sub>z<sub>i+1</sub> = 6(b<sub>i</sub> − b<sub>i−1</sub>),
+    where b<sub>i</sub> = (v<sub>i+1</sub>−v<sub>i</sub>)/h<sub>i</sub>. The end values are fixed at z = 0.
+    On [n<sub>i</sub>, n<sub>i+1</sub>] the curve is
+    S(x) = z<sub>i+1</sub>(x−n<sub>i</sub>)³/6h + z<sub>i</sub>(n<sub>i+1</sub>−x)³/6h + (v<sub>i+1</sub>/h − hz<sub>i+1</sub>/6)(x−n<sub>i</sub>) + (v<sub>i</sub>/h − hz<sub>i</sub>/6)(n<sub>i+1</sub>−x).
+    Stan solves the system with a dense solve. Here it is solved with the Thomas algorithm, which gives the same solution.
+    In the paper the knot values are fitted in Stan using binned Gaia star counts for the sky track and individual stars for distance and velocity.</p>
+  <h2>From the track to the masses</h2>
+  <p>The curve shows the present-day centreline. After correction for the Sun’s motion, the study’s proper motions show southern stars moving across the track.
+    The two proper-motion components are omitted here.
+    The masses come from a separate model fitted to the full 6-D track. It simulates tidal stripping from a progenitor and includes the Milky Way’s motion in response to the LMC.
+    The paper reports these enclosed masses for its preferred oblate Milky Way halo model.</p>
+  <dl class="results">
+    <dt>Milky Way</dt><dd>(2.85 ± 0.1) × 10¹¹ M☉ enclosed within 32.4 kpc</dd>
+    <dt>LMC</dt><dd>(7.02 ± 0.9) × 10¹⁰ M☉ enclosed within 32.8 kpc</dd>
+  </dl>
+</section>
+
+<footer class="wrap note">
+  <p>Paper: S. E. Koposov, D. Erkal, T. S. Li et al. (S5 Collaboration), MNRAS 521, 4936–4962 (2023),
+    <a href="https://doi.org/10.1093/mnras/stad551">doi:10.1093/mnras/stad551</a>, <a href="https://arxiv.org/abs/2211.04495">arXiv:2211.04495</a>.</p>
+  <p>Data: <a href="https://doi.org/10.5281/zenodo.7644540">Zenodo 10.5281/zenodo.7644540</a>, CC BY 4.0. Files used: orphan_M_track_bins, orphan_dmrr_bins and orphan_rv_bins.</p>
+  <p>Spline method: <a href="https://github.com/segasai/stan-splines">segasai/stan-splines</a>. That repository is public but has no licence file; this page contains a port, not a copy.</p>
+  <p>Stream frame: Koposov et al. 2019, Appendix B. LMC centre: Kallivayalil et al. 2013, Table 3 (proper-motion rotation centre). LMC distance: Pietrzyński et al. 2019.</p>
+  <p>Rendering: three.js 0.169.0. Page code: MIT.</p>
+</footer>
+
+<script type="application/json" id="knots">{"knots":{"phi2":{"file":"orphan_M_track_bins.fits","column":"phi2","phi1":[-90.0,-80.0,-70.0,-60.0,-50.0,-40.0,-25.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,80.0,90.0,100.0,110.0,120.0],"val":[-1.7938141812839816,0.6995756318420371,1.6890113714814814,2.0415331620370374,1.6663585662037035,1.139372236861111,-0.08133337424919353,-1.6046549592694443,-1.867885718518519,-2.018388,-1.5554766833333333,-1.1570690394444443,-0.09687031478126852,0.5422577410925925,1.7525394277777777,2.880007086111111,3.4533190222222228,3.045821914814815,2.047571117777778],"p16":[-4.5352416,0.3372225600000001,1.477894,1.8531571999999998,1.3669567999999999,0.89686936,-0.4092011199999999,-2.3540964,-2.0272963999999996,-2.156714,-1.6719016,-1.26998,-0.22667144,0.40550036,1.6450436,2.76423,3.3443936,2.8645788000000003,1.7040652],"p84":[1.0419652,1.0661876000000001,1.902646,2.231858,1.9638904,1.3818648000000002,0.25951312,-0.88294624,-1.709872,-1.8795188,-1.4425088,-1.0445436000000001,0.032426644,0.67921896,1.8597731999999998,2.99491,3.5621615999999996,3.2233716,2.3897516]},"dm":{"file":"orphan_dmrr_bins.fits","column":"dm","phi1":[-85.0,-70.35714285714286,-55.714285714285715,-41.07142857142857,-26.42857142857143,-11.785714285714292,17.5,32.14285714285714,46.78571428571428,61.428571428571416,76.07142857142856,90.71428571428572,105.35714285714286,120.0],"val":[19.424218388333333,18.330539739166667,17.6507527725,17.142101091666667,16.778431325,16.4715762725,16.201021513333334,16.130406784166667,16.150687962499997,16.544663118333336,16.779742761666665,17.324006968333332,17.874483353333336,18.475847065],"p16":[19.3573,18.3114,17.621,17.1109,16.7522,16.3757,16.0872,16.0684,16.1012,16.4552,16.7194,17.2896,17.817,18.3667],"p84":[19.4907,18.3497,17.6804,17.1734,16.8048,16.559,16.3021,16.1895,16.2008,16.6348,16.8408,17.3584,17.9322,18.586]},"rv":{"file":"orphan_rv_bins.fits","column":"rv_gsr","phi1":[-80.0,-70.0,-60.0,-50.0,-40.0,-30.0,-20.0,-10.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,80.0,90.0,100.0,110.0,120.0],"val":[-132.37902116092593,-171.77306294629625,-187.81498880555552,-192.64087694259257,-194.65321468148156,-186.08271842962967,-173.47306180370367,-157.23911731111107,-103.47535092740743,-73.50213376425927,-40.41463334814814,-7.813201889276515,27.86590725000001,57.201241533148156,89.23588073999998,107.46769932907404,124.61578413518515,129.56254691851854,124.86920515185186,125.99640266203707],"p16":[-137.72,-173.723,-188.907,-194.417,-196.957,-187.536,-176.853,-159.002,-108.377,-75.0411,-42.0125,-9.9505116,26.773599999999995,55.1861,87.0904,105.018,122.912,126.672,122.813,119.13784],"p84":[-127.058,-169.782,-186.727,-190.864,-192.332,-184.599,-170.201,-155.513,-98.2573,-71.968484,-38.8051,-5.649836800000001,28.9589,59.207916,91.381416,109.887,126.32,132.451,126.922,132.817]}},"frame":{"K19":[[-0.44761231,-0.08785756,-0.88990128],[-0.84246097,0.37511331,0.38671632],[0.29983786,0.92280606,-0.2419219]],"A":[[-0.057095820333710634,-0.8739415856218073,-0.4826656940587988],[0.4941107627040048,-0.4448286178025452,0.7469819642829028],[-0.8675221158451737,-0.19584076619723162,0.4572217982716857]],"b":[-8.1219733661223,0.0,0.020800000000000003],"lmc":[-1.045751581407174,-40.616097975387994,-27.53691707720374],"range":[-80.0,120.0]}}</script>
+
+<!-- Classic scripts, not modules, so the page also works from file://. Order matters: each uses the ones before it. -->
+<script src="js/spline.js"></script>
+<script src="js/coords.js"></script>
+<script src="js/data.js"></script>
+<script src="js/plots.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

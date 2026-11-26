@@ -44,17 +44,54 @@ async function startScene() {
   scene.add(new THREE.Mesh(new THREE.CircleGeometry(15, 96),   // illustrative Milky Way disc in the x-y plane
     new THREE.MeshBasicMaterial({ color: 0x8fa3d6, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
   const sun = new THREE.Vector3(...frame.b), lmc = new THREE.Vector3(...frame.lmc);
-  ball(0.8, 0xc9d3ee, new THREE.Vector3()); ball(1.1, 0xf2c14e, sun); ball(2.5, 0x9fb2dc, lmc);
-  const marker = ball(1.2, 0xffffff, new THREE.Vector3());
+  const bulge = ball(2, 0xc9d3ee, new THREE.Vector3());
+  bulge.scale.z = 0.6;
+  const rim = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 96 }, (_, i) => {
+    const angle = i / 96 * Math.PI * 2;
+    return new THREE.Vector3(15 * Math.cos(angle), 15 * Math.sin(angle), 0);
+  }));
+  scene.add(new THREE.LineLoop(rim, new THREE.LineBasicMaterial({ color: 0x8fa3d6, transparent: true, opacity: 0.4 })));
 
-  const tags = [['Sun', sun], ['LMC', lmc], ['Galactic centre', new THREE.Vector3()], ['φ₁ = −80°', pos(LO)], ['φ₁ = 120°', pos(HI - 1e-6)]]
-    .map(([text, v]) => { const s = document.createElement('span'); s.className = 'tag'; s.textContent = text; box.append(s); return [s, v]; });
+  // An illustrative companion-galaxy symbol, generated once and facing the viewer.
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext('2d');
+  for (const [x, y, radius] of [[64, 64, 35], [44, 55, 24], [84, 72, 20], [72, 40, 17]]) {
+    const glow = context.createRadialGradient(x, y, 0, x, y, radius);
+    glow.addColorStop(0, '#ddd5ea'); glow.addColorStop(1, 'rgba(221,213,234,0)');
+    context.fillStyle = glow;
+    context.fillRect(0, 0, 128, 128);
+  }
+  const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthWrite: false }));
+  cloud.position.copy(lmc);
+  cloud.scale.set(14, 14, 1);
+  scene.add(cloud);
+  const selected = new THREE.Vector3();
+  const sightGeometry = new THREE.BufferGeometry().setFromPoints([sun, selected]);
+  const sightline = new THREE.Line(sightGeometry, new THREE.LineBasicMaterial({ color: 0xf2c14e, transparent: true, opacity: 0.6 }));
+  scene.add(sightline);
+
+  const tags = [
+    ['Sun', sun, 'sun'], ['Large Magellanic Cloud', lmc, 'lmc'],
+    ['Galactic centre', new THREE.Vector3(), 'centre'],
+    ['Milky Way', new THREE.Vector3(0, 15, 0), 'galaxy'],
+    ['Orphan–Chenab', pos(105), 'stream'], ['', selected, 'selected']
+  ].map(([text, v, kind]) => {
+    const label = document.createElement('span');
+    label.className = 'tag ' + kind;
+    label.textContent = text;
+    label.setAttribute('aria-hidden', 'true');
+    box.append(label);
+    return [label, v];
+  });
   let w = 1, h = 1;                                      // view size, updated on resize so the render loop never reads layout
   function placeTags() {                                 // project 3-D anchor points to HTML labels
     for (const [s, v] of tags) {
       const p = v.clone().project(camera);
-      s.hidden = p.z > 1;
-      s.style.transform = `translate(${(p.x + 1) / 2 * w}px, ${(1 - p.y) / 2 * h - 8}px)`;
+      s.hidden = p.z > 1 || p.z < -1 || (v === selected && !sightline.visible);
+      const x = (p.x + 1) / 2 * w, y = (1 - p.y) / 2 * h;
+      s.style.left = x + 'px';
+      s.style.top = y + 'px';
     }
   }
   let fitted = false;                                    // later resizes keep the user's zoom and pan
@@ -69,7 +106,12 @@ async function startScene() {
   renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); placeTags(); });
 
   return x => {
-    marker.visible = x >= LO && x < HI;
-    if (marker.visible) marker.position.copy(pos(x));
+    sightline.visible = x >= LO && x < HI;
+    if (sightline.visible) {
+      selected.copy(pos(x));
+      sightGeometry.attributes.position.setXYZ(1, selected.x, selected.y, selected.z);
+      sightGeometry.attributes.position.needsUpdate = true;
+      sightGeometry.computeBoundingSphere();
+    }
   };
 }

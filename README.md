@@ -21,6 +21,34 @@ quotes the following values for its preferred oblate Milky Way halo model.
 
 ## What the page shows
 
+The page teaches natural cubic splines to computer science students who know basic calculus and
+matrices. It follows the released velocity knots through smoothness constraints, natural boundary
+conditions, a tridiagonal system, the Thomas algorithm, and evaluation of a selected interval.
+A hand-worked system explains elimination and back substitution; live coefficients and a local
+curve follow the same longitude selection as the stream explorer.
+
+A separate **illustrative sandbox** has five fixed positions and editable dimensionless values.
+Drag a knot vertically, use the arrow keys on a focused knot, or enter a number from -3 to 3 in
+increments of 0.1. The curve and solved second derivatives update together. Reset restores the
+initial values. Invalid entries preserve the last valid curve. These edits never alter the
+published measurements. Both longitude selectors and chart pointers select in half-degree steps,
+from -90 to 119.5 degrees; velocity is unavailable below -80 degrees.
+
+The tidal-stripping diagrams, model comparison and mass-aperture diagrams retain the astronomical
+context. Schematic trial curves and galaxy symbols are labelled illustrative. Deeper derivations,
+the published-knot table, and the full second-derivative plot use native expandable sections.
+Sixteen dotted-underlined terms offer short explanations specific to this application, with
+further-reading links to Wikipedia, the study, and scientific references. Hover, focus, or tap
+to open a hint; Escape or Close dismisses it. Browsers without native popovers get glossary links.
+The header's **PT / EN** toggle switches the page between Brazilian Portuguese and English,
+including hints, chart labels, validation messages, and accessibility text. It remembers the
+choice locally when storage is available and preserves the selection, sandbox edits, and camera.
+English is the default and remains available without JavaScript. Scientific values, formulas,
+code, and source destinations are unchanged; numerical displays keep the existing decimal point.
+In the 3-D map, a gold sightline links the Sun to the selected position. Its length is the
+heliocentric distance in the readout. A hollow ring marks the selection. The disc, bulge,
+sunburst and companion-galaxy sprite identify the context objects with enlarged symbols.
+
 - **3-D scene** (Galactocentric kpc). The present-day centreline uses the φ₂(φ₁) and distance(φ₁)
   splines. Colour shows velocity along the Sun–star sightline in the Galactic standard of rest.
   The line is dashed across the RR Lyrae distance gap. The Sun, LMC and an illustrative Milky Way
@@ -57,6 +85,8 @@ quotes the following values for its preferred oblate Milky Way halo model.
 | `js/plots.js` | the 2-D SVG panels and the pointer → φ₁ mapping |
 | `js/scene.js` | the three.js scene, loaded with a dynamic `import()` |
 | `js/main.js` | links the φ₁ cursor, slider, readout and 3-D marker |
+| `js/lesson-model.js` | inspectable matrix rows and polynomial coefficients; isolated sandbox state |
+| `js/lesson.js` | walkthrough plots, shared selection, and numeric/keyboard/pointer sandbox controls |
 
 The JS files are classic scripts that run in order and share globals, not ES modules. Chrome blocks
 external module scripts on `file://`, but it allows classic scripts and a dynamic `import()` of
@@ -121,6 +151,27 @@ Resulting LMC position: (−1.05, −40.62, −27.54) kpc.
 | This repo's code | MIT (see `LICENSE`) |
 
 ## Verification
+
+The learning features have additional numerical and DOM integration checks:
+
+```
+node tools/check-lesson.mjs
+npm ci --prefix tools
+node tools/check-lesson-ui.mjs
+node tools/check-hints.mjs
+node tools/check-language.mjs
+```
+
+LinkeDOM is a development-only dependency under `tools/`; it is not loaded by the page. The
+integration suite runs page scripts and DOM event handlers, covering edits, validation, reset,
+shared selection, out-of-domain recovery, and data isolation. Hint checks simulate the native
+popover API to verify hover continuity, focus, dismissal, viewport placement, and the glossary
+fallback. These checks do not render CSS or verify native browser behavior.
+The language suite checks translated prose and live states, state preservation, source/data
+integrity, persistence, and unavailable storage. These automated suites do not replace
+a real-browser desktop/mobile accessibility and visual check. Browser inspection was unavailable
+during the learning-feature implementation; the earlier browser checks below refer to the
+previous page, not this new layout.
 
 `python tools/prep.py <…/tozenodo/measurements>` builds `tools/reference.json` with scipy
 `CubicSpline(bc_type='natural')` and astropy: 50 φ₁ values per table, the z at the knots, and 50 3-D

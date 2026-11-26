@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orphan–Chenab Splines</title>
+<title>Natural cubic splines · A trail of stars</title>
 <meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12151d" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -16,47 +16,289 @@
 </script>
 </head>
 <body>
-<a class="skip" href="#main">Skip to the plots</a>
+<a class="skip" href="#main">Skip to the walkthrough</a>
 <header class="wrap">
-  <h1>The&nbsp;Orphan–&#8288;Chenab stream, traced by natural cubic splines</h1>
-  <p class="deck">The Orphan–Chenab stream is tidal debris from a likely dwarf galaxy, traced over about 200° of sky.
-    Koposov, Erkal, Li et al. (2023) combined Gaia, S⁵ and other spectroscopic surveys to fit the stream’s position and motion
-    along the stream angle φ₁. Those measurements constrained the masses of the Milky Way and the Large Magellanic Cloud.</p>
-  <p class="note">Every curve here is computed in your browser from the knot values the authors released.
-    Move along a panel, or use the φ₁ slider, to pick a point on the stream. Drag the sky to turn it; scroll or pinch to zoom.
-    From the keyboard, focus the sky and use the arrow keys to pan, or Shift + arrow keys to turn it.</p>
+  <div id="language-switch" class="language-switch" role="group" aria-label="Language / Idioma" data-no-translate hidden>
+    <button type="button" data-language="pt" lang="pt-BR" aria-label="Português (Brasil)" aria-pressed="false">PT</button>
+    <button type="button" data-language="en" lang="en" aria-label="English" aria-pressed="true">EN</button>
+  </div>
+  <h1>A smooth curve through<br>a trail of stars.</h1>
+  <p class="deck">Learn <button type="button" class="term-hint" popovertarget="hint-spline" popovertargetaction="show">natural cubic splines</button> through the <button type="button" class="term-hint" popovertarget="hint-stream" popovertargetaction="show">Orphan–Chenab stream</button>: from a handful of fitted values to a curve you can evaluate anywhere between them.</p>
+  <p class="note">For curious computer science students. Bring basic calculus and matrices; we’ll build the spline and its solver from the beginning.</p>
+  <p class="note hint-instructions">Dotted-underlined terms have a short explanation. Hover, focus or tap to read it.</p>
+  <nav class="lesson-nav" aria-label="Learning journey">
+    <a href="#knots-intro">Start with the data</a><a href="#build">Build the curve</a><a href="#solve">Solve &amp; evaluate</a><a href="#sandbox">Experiment</a><a href="#observatory">Explore the stream</a>
+  </nav>
   <noscript><p class="note">The plots are computed by JavaScript, which is turned off. The text below still describes the method and the results.</p></noscript>
 </header>
 
-<main id="main" class="wrap stage">
+<main id="main">
+<section class="wrap lesson-section" id="knots-intro" aria-labelledby="knots-heading">
+  <div class="lesson-layout">
+    <div class="lesson-prose">
+      <h2 id="knots-heading">1. Start with the fitted knots</h2>
+      <p>The Orphan–Chenab stream is a long trail of stars, likely stripped from a small galaxy. Astronomers measured its position, distance and motion to investigate the gravity of the Milky Way and the Large Magellanic Cloud.</p>
+      <p>Here we follow one quantity: <strong><button type="button" class="term-hint" popovertarget="hint-radial" popovertargetaction="show">radial velocity</button></strong>, the motion along our line of sight. The coordinate <span translate="no"><button type="button" class="term-hint" popovertarget="hint-phi" popovertargetaction="show">φ₁</button></span> tells us where we are along the trail. Velocity is expressed in the <button type="button" class="term-hint" popovertarget="hint-gsr" popovertargetaction="show">Galactic standard of rest</button>, correcting for the Sun’s motion.</p>
+      <p>The researchers fitted values at selected positions called <strong><button type="button" class="term-hint" popovertarget="hint-knots" popovertargetaction="show">knots</button></strong>. Those released values are our inputs. We reconstruct the curve between them; we are not fitting the original stars again.</p>
+      <dl class="notation"><div><dt><var>n</var><sub>i</sub></dt><dd>A knot’s position along the stream, in degrees.</dd></div><div><dt><var>v</var><sub>i</sub></dt><dd>Its fitted velocity, in km/s.</dd></div><div><dt><var>S</var>(<var>x</var>)</dt><dd>The interpolated velocity at position <var>x</var>.</dd></div></dl>
+    </div>
+    <figure class="learn-figure">
+      <svg id="lesson-data" class="lesson-chart" role="img" aria-label="Twenty published velocity knots with percentile bars and their natural cubic spline"></svg>
+      <label class="check-control"><input id="compare-lines" type="checkbox"> Compare with straight-line joins</label>
+      <figcaption>Twenty released knots, one reconstructed curve. Bars show the <button type="button" class="term-hint" popovertarget="hint-percentiles" popovertargetaction="show">16th–84th posterior percentiles</button> at the knots; they do not define an uncertainty band between them.</figcaption>
+      <details><summary>Inspect the released values</summary><div class="table-scroll" tabindex="0" role="region" aria-label="Released velocity knot table"><table><caption>Published radial-velocity knots</caption><thead><tr><th scope="col">i</th><th scope="col">φ₁ (°)</th><th scope="col">v (km/s)</th></tr></thead><tbody id="published-knots"></tbody></table></div></details>
+    </figure>
+  </div>
+</section>
+
+<section class="wrap lesson-section" id="build" aria-labelledby="build-heading">
+  <h2 id="build-heading">2. Join the pieces smoothly</h2>
+  <div class="lesson-layout">
+    <div class="lesson-prose">
+      <p>Straight lines pass through every knot, but their slopes usually jump at the joins. A spline uses a small polynomial on each interval. For a <strong>cubic</strong> spline, each piece has four coefficients:</p>
+      <p class="math-line" translate="no">S<sub>i</sub>(x) = a + bt + ct² + dt³<br><span>t = x − n<sub>i</sub></span></p>
+      <p>We choose the pieces together so that their values, first derivatives and <button type="button" class="term-hint" popovertarget="hint-derivative" popovertargetaction="show">second derivatives</button> agree at each interior knot. That gives a curve with no breaks, no sudden slope changes and no jumps in its second derivative.</p>
+      <p><strong><button type="button" class="term-hint" popovertarget="hint-natural" popovertargetaction="show">Natural</button></strong> supplies the two remaining conditions: <span translate="no">S″ = 0</span> at the first and last knots. This does <em>not</em> mean zero slope or a flat endpoint. It is a boundary choice, not a claim about the stream outside the data.</p>
+    </div>
+    <figure class="learn-figure continuity-figure">
+      <svg viewBox="0 0 600 270" role="img" aria-labelledby="join-title join-desc">
+        <title id="join-title">Two cubic pieces agree at a knot</title><desc id="join-desc">A solid and a dashed cubic meet at the central knot. A tangent crosses the join, illustrating their shared slope. The pieces also share the same second derivative there. This is an illustrative diagram.</desc>
+        <line x1="55" y1="220" x2="555" y2="220" class="axis"/>
+        <line x1="300" y1="40" x2="300" y2="220" class="grid"/>
+        <path d="M70 205 C145 205 225 100 300 100" class="join-first"/>
+        <path d="M300 100 C375 100 455 205 530 205" class="join-second"/>
+        <line x1="215" y1="100" x2="385" y2="100" class="tangent"/>
+        <circle cx="300" cy="100" r="7" class="join-knot"/>
+        <text x="110" y="80">One cubic</text><text x="410" y="80">Next cubic</text>
+        <text x="300" y="249" text-anchor="middle">Shared knot nᵢ</text>
+        <text x="300" y="48" text-anchor="middle">Same value, slope and second derivative</text>
+      </svg>
+      <figcaption>Each join obeys three agreements: <span translate="no">S<sub>left</sub> = S<sub>right</sub></span>, <span translate="no">S′<sub>left</sub> = S′<sub>right</sub></span>, and <span translate="no">S″<sub>left</sub> = S″<sub>right</sub></span>. Illustration, not an astronomical measurement.</figcaption>
+      <details><summary>Why are two boundary conditions needed?</summary><p>With <var>N</var> knots there are <var>N</var> − 1 cubic pieces, each with four coefficients. Matching both values on every interval gives 2(<var>N</var> − 1) conditions. Matching first and second derivatives at the interior knots adds 2(<var>N</var> − 2). That leaves two conditions, supplied here by the natural endpoints.</p></details>
+    </figure>
+  </div>
+</section>
+
+<section class="wrap lesson-section" id="solve" aria-labelledby="solve-heading">
+  <h2 id="solve-heading">3. Solve for how the curve bends</h2>
+  <div class="lesson-layout">
+    <div class="lesson-prose">
+      <p>Instead of solving for every polynomial coefficient at once, solve for <span translate="no">z<sub>i</sub> = S″(n<sub>i</sub>)</span>, the second derivative at each knot. Think of it as how quickly the slope changes.</p>
+      <p>Let <span translate="no">h<sub>i</sub> = n<sub>i+1</sub> − n<sub>i</sub></span> be an interval’s width, and <span translate="no">b<sub>i</sub> = (v<sub>i+1</sub> − v<sub>i</sub>)/h<sub>i</sub></span> its straight-line slope. Each interior knot contributes one equation:</p>
+      <div class="formula-scroll" tabindex="0" role="region" aria-label="Interior spline equation"><p class="math-line" translate="no">h<sub>i−1</sub>z<sub>i−1</sub> + 2(h<sub>i−1</sub> + h<sub>i</sub>)z<sub>i</sub> + h<sub>i</sub>z<sub>i+1</sub> = 6(b<sub>i</sub> − b<sub>i−1</sub>)</p></div>
+      <p>Only the previous, current and next <var>z</var> appear in a row. The matrix therefore has just three populated diagonals: it is <strong><button type="button" class="term-hint" popovertarget="hint-tridiagonal" popovertargetaction="show">tridiagonal</button></strong>.</p>
+      <p>The <strong><button type="button" class="term-hint" popovertarget="hint-thomas" popovertargetaction="show">Thomas algorithm</button></strong> exploits that structure. A forward sweep eliminates the lower diagonal; back substitution recovers the unknowns. The solve takes linear time in the number of knots. The endpoint values stay fixed at zero.</p>
+      <details><summary>Work through a small system by hand</summary>
+        <p>Use the sandbox’s initial values: positions [0, 1, 2, 3, 4] and values [0, 1, 0, 1, 0]. Every width is 1. The straight-line slopes are [1, −1, 1, −1], so their successive changes give the right-hand side [−12, 12, −12]. With z₀ = z₄ = 0, only three unknowns remain:</p>
+        <pre aria-label="Three by three tridiagonal system"><code>⎡ 4  1  0 ⎤ ⎡ z₁ ⎤   ⎡ −12 ⎤
+⎢ 1  4  1 ⎥ ⎢ z₂ ⎥ = ⎢  12 ⎥
+⎣ 0  1  4 ⎦ ⎣ z₃ ⎦   ⎣ −12 ⎦</code></pre>
+        <ol class="solver-steps"><li><strong>Eliminate from left to right.</strong> Subtract ¼ of row 1 from row 2. Its equation becomes (15/4)z₂ + z₃ = 15. Subtract 4/15 of this new row 2 from row 3, leaving (56/15)z₃ = −16.</li><li><strong>Substitute from right to left.</strong> First z₃ = −30/7. Put that into row 2 to get z₂ = 36/7, then into row 1 to get z₁ = −30/7.</li></ol>
+        <p>That is elimination without a dense matrix: each step only needs the neighboring row. <a href="#sandbox">Go to the sandbox</a> and use its reset button to compare the displayed second derivatives with [0, −4.286, 5.143, −4.286, 0]. These are illustrative values, not stream measurements.</p>
+      </details>
+      <details><summary>Connect the equation to the solver code</summary><p>For an interior row <var>k</var>, <code>c</code> and <code>d</code> store the modified upper-diagonal and right-hand-side entries. The reduced diagonal is <code>m</code>.</p><pre><code>const m = 2 * (h[k-1] + h[k])
+        - h[k-1] * c[k-1];
+c[k] = h[k] / m;
+d[k] = (6 * (b[k] - b[k-1])
+        - h[k-1] * d[k-1]) / m;
+
+// Back substitution, from right to left:
+z[k] = d[k] - c[k] * z[k+1];</code></pre><p><a href="js/spline.js">Read the complete implementation</a>. The original Stan method uses a dense solve; this page’s independent port solves the same system with Thomas elimination.</p></details>
+    </div>
+    <div class="worked-example" aria-label="Worked example using published velocity knots">
+      <h3>Follow one real interval</h3>
+      <p>Move along the published velocity curve. The interval, equation and evaluation below follow the same selection as the stream map.</p>
+      <label class="scrub" for="lesson-phi">Position φ₁ <input id="lesson-phi" type="range" min="-90" max="119.5" step="0.5" value="35" disabled></label>
+      <p class="selection-value"><output id="lesson-position" for="lesson-phi">35.0°</output></p>
+      <p class="caption">Both selectors move in 0.5° steps. Velocity knots start at −80°; the last selectable position is 119.5°.</p>
+      <p id="lesson-unavailable" class="input-message" hidden>No released velocity spline covers this position. Select a position from −80° to below 120° to resume the example.</p>
+      <div id="lesson-work">
+        <p id="lesson-interval" class="caption">Loading the published interval…</p>
+        <svg id="lesson-interval-plot" class="lesson-chart" role="img" aria-label="Selected interval of the published velocity spline"></svg>
+        <h4>A row of the system</h4>
+        <p id="lesson-row-context" class="caption"></p>
+        <p id="lesson-row" class="numeric-equation" translate="no"></p>
+        <p id="lesson-z" class="caption"></p>
+      </div>
+      <noscript><p>The live example needs JavaScript. You can still follow the equations and read the solver source.</p></noscript>
+    </div>
+  </div>
+  <details class="derivative-detail"><summary>See all solved second derivatives for the real data</summary>
+    <svg class="panel" id="p-z" role="img" translate="no" aria-label="Second derivatives of the velocity spline at its knots"></svg>
+    <p class="caption">The ringed endpoints have <span translate="no">z = 0</span>. Interior values are solved together, not chosen independently. Units: km/s per degree squared.</p>
+  </details>
+</section>
+
+<section class="wrap lesson-section" id="evaluate" aria-labelledby="evaluate-heading">
+  <div class="lesson-layout">
+    <div class="lesson-prose">
+      <h2 id="evaluate-heading">4. Evaluate the selected piece</h2>
+      <p>Once we have the second derivatives, the cubic on any interval is determined. Find the interval containing <var>x</var>, measure <span translate="no">t = x − n<sub>i</sub></span> from its left knot, then evaluate its polynomial.</p>
+      <p>The coefficients below are calculated from the published values and the solved second derivatives. They are another way to write the moment-form expression used in <code>evaluate()</code>.</p>
+      <details><summary>Where do the four coefficients come from?</summary><div class="formula-scroll" tabindex="0" role="region" aria-label="Local polynomial coefficients"><p class="math-line" translate="no">a = v<sub>i</sub><br>b = (v<sub>i+1</sub> − v<sub>i</sub>)/h − h(2z<sub>i</sub> + z<sub>i+1</sub>)/6<br>c = z<sub>i</sub>/2<br>d = (z<sub>i+1</sub> − z<sub>i</sub>)/(6h)</p></div><p>Here <var>h</var> is the current interval width. These local coefficients <var>a</var>, <var>b</var>, <var>c</var>, <var>d</var> are distinct from the solver’s temporary arrays. Integrating the linearly varying second derivative twice and matching the two knot values gives this expression.</p></details>
+      <p class="note">The implementation uses half-open intervals: <span translate="no">n<sub>i</sub> ≤ x &lt; n<sub>i+1</sub></span>. It rejects the final knot itself and never extrapolates. The mathematical spline still has a defined value at that endpoint.</p>
+    </div>
+    <div class="worked-example evaluation" aria-label="Live evaluation of the selected interval">
+      <h3>From coefficients to a velocity</h3>
+      <p id="evaluation-location">Select a position in the example above.</p>
+      <dl id="lesson-coefficients" class="coefficient-list" translate="no"></dl>
+      <p class="numeric-equation" translate="no">S(x) = a + bt + ct² + dt³</p>
+      <p id="lesson-substitution" class="caption"></p>
+      <p class="evaluation-result"><output id="lesson-result" for="lesson-phi phi1">—</output></p>
+      <p class="caption">Computed with full precision; displayed coefficients are rounded.</p>
+      <a href="#observatory">Find this same velocity on the stream map</a>
+    </div>
+  </div>
+</section>
+
+<section class="wrap lesson-section" id="sandbox" aria-labelledby="sandbox-heading">
+  <div class="section-intro"><h2 id="sandbox-heading">5. Move a knot. Follow the change.</h2>
+    <p>This sandbox uses <strong>five illustrative, dimensionless values</strong>. It never changes the published measurements. Knot positions stay fixed so you can isolate what changing a value does.</p>
+  </div>
+  <div class="sandbox-layout">
+    <figure class="learn-figure sandbox-figure">
+      <svg id="sandbox-plot" class="lesson-chart" role="group" aria-labelledby="sandbox-plot-title sandbox-plot-desc"><title id="sandbox-plot-title">Editable natural cubic spline</title><desc id="sandbox-plot-desc">Drag a knot vertically, or focus it and use the up and down arrow keys. Equivalent numeric controls follow the plot.</desc></svg>
+      <figcaption>Drag a knot up or down. Keyboard: Tab to a knot, then use ↑ or ↓ for 0.1; Home and End set the limits. The dotted line joins the same values with straight segments.</figcaption>
+      <p class="caption">Try raising the middle knot. Its neighbors’ second derivatives change too: the smoothness equations couple the pieces together. A natural spline can overshoot its knot values.</p>
+    </figure>
+    <div class="sandbox-controls">
+      <h3>Change the values</h3>
+      <p class="caption" id="sandbox-help">Enter a value from −3 to 3 in increments of 0.1. The curve and second derivatives update immediately.</p>
+      <fieldset id="sandbox-fields" disabled><legend class="visually-hidden">Illustrative knot values</legend><div id="sandbox-inputs"></div></fieldset>
+      <p id="sandbox-error" class="input-message" role="status" hidden></p>
+      <button id="sandbox-reset" type="button" disabled>Reset the five knots</button>
+      <p id="sandbox-status" class="caption" role="status" aria-live="polite">Loading the illustrative spline…</p>
+      <noscript><p>Enable JavaScript to edit the knots. The walkthrough and source code remain readable without it.</p></noscript>
+      <h4>The solved second derivatives</h4>
+      <p class="caption">The two boundary values stay at zero, even when you move the endpoint knots.</p>
+      <dl id="sandbox-derivatives" class="derivative-list" translate="no"></dl>
+    </div>
+  </div>
+</section>
+
+<section class="wrap lesson-section" id="observatory" aria-labelledby="observatory-heading">
+  <div class="section-intro"><h2 id="observatory-heading">The same method, a three-dimensional trail</h2>
+    <p>The sky-track and <button type="button" class="term-hint" popovertarget="hint-distance" popovertargetaction="show">distance-modulus</button> tables each get their own spline. Combining the sky position with distance places the centreline in 3-D; radial velocity supplies its colour. The distance-modulus spline is converted to <button type="button" class="term-hint" popovertarget="hint-kpc" popovertargetaction="show">kiloparsecs</button> <em>after</em> evaluation.</p>
+    <p class="note">Select a position with the slider or point at a plot. The gold sightline starts at the Sun. Drag the map to rotate; scroll or pinch to zoom. With the map focused, arrow keys pan and Shift + arrows rotate.</p></div>
+<div class="stage">
   <figure class="plate">
     <div id="scene" tabindex="0" role="img" aria-label="3-D stream centreline coloured by Galactic-standard-of-rest velocity, dashed across the distance-tracer gap"></div>
     <div class="key"><span>−200</span><div class="bar"></div><span>+200 km/s</span></div>
     <p class="caption">Colour shows velocity along the Sun–star sightline in the Galactic standard of rest, corrected for the Sun’s motion. Grey marks zero.
-      The centreline is drawn in Galactocentric kpc (Astropy v4.0) over −80° ≤ φ₁ &lt; 120°.
-      The dashed section interpolates across −10° to +20°, where the study found no likely RR Lyrae distance tracers.
-      The disc (radius 15 kpc) is a sketch that only marks the Milky Way’s plane.</p>
+      The centreline is drawn in <button type="button" class="term-hint" popovertarget="hint-galactocentric" popovertargetaction="show">Galactocentric</button> kpc (Astropy v4.0) over −80° ≤ φ₁ &lt; 120°.
+      The dashed section interpolates across −10° to +20°, where the study found no likely <button type="button" class="term-hint" popovertarget="hint-rrlyrae" popovertargetaction="show">RR Lyrae</button> distance tracers.
+      Positions use the measured scale. Galaxy symbols and the Sun are illustrative and enlarged. The disc marks the Galactic plane with a sketch of radius 15 kpc.</p>
+    <figcaption class="caption">Milky Way — our galaxy · Sun — we observe from here · Large Magellanic Cloud — companion galaxy · Orphan–Chenab — trail of stars</figcaption>
   </figure>
   <div class="panels">
+    <h2>Measure the trail from the Sun</h2>
+    <p class="caption">Pulsating stars called RR Lyrae have a predictable brightness. Comparing that with how bright they look gives their distance. One kiloparsec (kpc) is about 3,260 light-years. The angles φ₁ and φ₂ locate a point along and across the trail.</p>
     <div class="readout" translate="no">
       <output id="r-phi1" for="phi1"></output>
       <dl><div><dt>φ₂</dt><dd id="r-phi2"></dd></div><div><dt>Distance from Sun</dt><dd id="r-d"></dd></div><div><dt>v_gsr</dt><dd id="r-rv"></dd></div></dl>
     </div>
-    <label class="scrub">φ₁ <input id="phi1" type="range" min="-90" max="120" step="0.5" value="30"></label>
+    <label class="scrub">φ₁ <input id="phi1" type="range" min="-90" max="119.5" step="0.5" value="35"></label>
     <svg class="panel" id="p-phi2" role="img" translate="no" aria-label="φ₂ against φ₁"></svg>
     <svg class="panel" id="p-dist" role="img" translate="no" aria-label="Distance from Sun against φ₁, with the RR Lyrae gap shaded"></svg>
+<p class="caption plot-key"><span class="key-dot"></span> Fitted distance <span class="key-bar">↕</span> Uncertainty <span class="key-line"></span> Smooth fit</p>
     <svg class="panel" id="p-rv" role="img" translate="no" aria-label="v_gsr against φ₁"></svg>
     <p class="caption">All three panels share the φ₁ axis in degrees. Dots are the released knot values. Bars run from the 16th to the 84th posterior percentile at each knot.
       The curves evaluate the natural splines through the knots. The distance plot converts the modulus spline to kpc and shades the RR Lyrae gap.
       Each curve ends at its own first and last knot, because the spline is never extrapolated.</p>
-    <svg class="panel" id="p-z" role="img" translate="no" aria-label="Second derivatives of the v_gsr spline at its knots"></svg>
-    <p class="caption">This is what the spline solver computes: the curvature z = S″ at each v_gsr knot.
-      At the two ringed ends z is held at 0, which is what makes the spline natural.</p>
   </div>
-</main>
+</div>
+</section>
 
-<section class="wrap prose">
-  <h2>How the spline works</h2>
+<section class="wrap story">
+  <h2>How a galaxy becomes a trail of stars</h2>
+  <p>The Milky Way’s gravity pulls differently across a small galaxy. Stars escape from both sides and gradually spread along its path.</p>
+  <div class="sequence">
+    <figure>
+      <svg viewBox="0 0 300 140" role="img" aria-label="Stars clustered in a small dwarf galaxy">
+        <ellipse cx="150" cy="70" rx="38" ry="33" class="wash"/>
+        <path d="M128 64h1m18-12h1m21 15h1m-32 20h1m25 1h1m-12-16h1m-3 30h1" class="stars"/>
+      </svg>
+      <figcaption>A small galaxy holds its stars together.</figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 300 140" role="img" aria-label="Tidal forces stretch the group, releasing stars on both sides">
+        <ellipse cx="150" cy="70" rx="55" ry="21" class="wash"/>
+        <path d="M63 75h1m38-8h1m26-3h1m20 7h1m24 7h1m24-9h1m40-8h1" class="stars"/>
+        <path d="M94 45H47l8-6m-8 6 8 6M205 95h48l-8-6m8 6-8 6" class="drawing"/>
+      </svg>
+      <figcaption>Different pulls let stars escape on either side.</figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 300 140" role="img" aria-label="Escaped stars spread into a curved trail">
+        <path d="M25 104Q150 12 275 76" class="drawing faint"/>
+        <path d="M25 104h1m40-25h1m40-16h1m43-7h1m43 1h1m43 6h1m39 13h1" class="stars"/>
+      </svg>
+      <figcaption>Over time, the debris stretches into a stellar stream.</figcaption>
+    </figure>
+  </div>
+  <p class="caption">Illustration of <button type="button" class="term-hint" popovertarget="hint-tidal" popovertargetaction="show">tidal stripping</button>. The Orphan–Chenab parent’s location is still unknown. The Large Magellanic Cloud is a companion galaxy whose gravity disturbs the trail.</p>
+
+  <h2>How the measurements weigh two galaxies</h2>
+  <p>Gravity bends the stream and changes its motion. The researchers simulated streams under different galaxy masses, then compared the results with the measurements.</p>
+  <ol class="method">
+    <li><strong>Measure the debris</strong><p>Map its sky position, distance and motion, including velocities across our view.</p></li>
+    <li><strong>Simulate its history</strong><p>Release stars from a small galaxy moving under the gravity of the Milky Way and its companion. Both galaxies move in response to each other.</p></li>
+    <li><strong>Compare with the data</strong><p>Find which masses best reproduce the stream’s positions and velocities, accounting for uncertainty.</p></li>
+  </ol>
+  <figure class="comparison">
+    <svg viewBox="0 0 600 150" role="img" aria-label="Illustrative trial stream shapes compared with a reference track">
+      <path d="M30 110Q220 5 570 90M30 110Q220 135 570 25" class="drawing faint"/>
+      <path d="M30 110Q220 30 570 60" class="drawing"/>
+      <path d="M30 110h1m90-30h1m110-18h1m140-8h1m200 6h1" class="stars"/>
+      <text x="320" y="130">Different model masses give different trails</text>
+    </svg>
+    <figcaption>Illustrative trial curves and reference points. The actual fit uses positions, distances and all three velocity components.</figcaption>
+  </figure>
+  <p>After correcting for the Sun’s motion, the measured motions across the sky show southern stars moving across the trail toward the companion. This is one sign of the companion’s gravitational influence.</p>
+
+  <h2>Mass inside a measured radius</h2>
+  <p>Each result counts the mass inside a sphere centred on the named galaxy. “Sun masses” expresses that mass in units of our Sun’s mass.</p>
+  <div class="apertures">
+    <figure>
+      <svg viewBox="0 0 260 190" role="img" aria-label="A radius of 32.4 kiloparsecs about the Milky Way centre">
+        <circle cx="130" cy="95" r="81" class="drawing"/>
+        <ellipse cx="130" cy="95" rx="30" ry="10" class="wash"/>
+        <circle cx="130" cy="95" r="3" class="ink"/>
+        <path d="M130 95h81" class="drawing"/>
+        <text x="155" y="84">32.4 kpc</text>
+      </svg>
+      <figcaption><strong>Milky Way</strong><br>285 ± 10 billion Sun masses<br><span class="caption">Disc, bulge and dark matter together</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 260 190" role="img" aria-label="A radius of 32.8 kiloparsecs about the Large Magellanic Cloud centre">
+        <circle cx="130" cy="95" r="82" class="drawing"/>
+        <ellipse cx="130" cy="95" rx="12" ry="8" class="wash"/>
+        <circle cx="130" cy="95" r="3" class="ink"/>
+        <path d="M130 95h82" class="drawing"/>
+        <text x="155" y="84">32.8 kpc</text>
+      </svg>
+      <figcaption><strong>Large Magellanic Cloud</strong><br>70.2 ± 9 billion Sun masses<br><span class="caption">Centred on the companion galaxy</span></figcaption>
+    </figure>
+  </div>
+  <p class="caption">The circles show cross-sections through the mass apertures on the same scale. The galaxy symbols are illustrative. Values are rounded as in the paper’s abstract, for its preferred model with a flattened Milky Way dark matter halo.</p>
+
+  <h2>What can the stream tell us next?</h2>
+  <figure class="comparison">
+    <svg viewBox="0 0 600 160" role="img" aria-label="Illustration of a stream broadening along the line of sight">
+      <path d="M70 80Q270 75 540 30L540 130Q270 85 70 80" class="wash"/>
+      <path d="M70 80H540" class="drawing"/>
+      <path d="M110 79h1m80 4h1m90-12h1m75 22h1m70-43h1m55 65h1m40-28h1" class="stars"/>
+      <path d="M555 35v90m-5-8 5 8 5-8" class="drawing"/>
+      <text x="330" y="150">Depth along our line of sight</text>
+    </svg>
+    <figcaption>Illustration of distance spread. The distant debris is broader than the paper’s best-fit model predicts.</figcaption>
+  </figure>
+  <p>Why does the trail spread out so much? Future comparisons could test how the parent galaxy lost its stars and how the gravity of the Milky Way and its companion shaped the debris.</p>
+  <p class="caption">These are open questions. The measured width and depth provide more information to test future models. <a href="https://arxiv.org/html/2211.04495v2#S6.SS1">Paper, section 6.1 and figure 19</a>.</p>
+</section>
+
+<details class="wrap equations">
+  <summary>Reference: the full moment-form equation</summary>
   <p>With knots n<sub>i</sub>, values v<sub>i</sub> and spacings h<sub>i</sub> = n<sub>i+1</sub> − n<sub>i</sub>, the interior second derivatives
     solve a tridiagonal system h<sub>i−1</sub>z<sub>i−1</sub> + 2(h<sub>i−1</sub>+h<sub>i</sub>)z<sub>i</sub> + h<sub>i</sub>z<sub>i+1</sub> = 6(b<sub>i</sub> − b<sub>i−1</sub>),
     where b<sub>i</sub> = (v<sub>i+1</sub>−v<sub>i</sub>)/h<sub>i</sub>. The end values are fixed at z = 0.
@@ -64,16 +306,105 @@
     S(x) = z<sub>i+1</sub>(x−n<sub>i</sub>)³/6h + z<sub>i</sub>(n<sub>i+1</sub>−x)³/6h + (v<sub>i+1</sub>/h − hz<sub>i+1</sub>/6)(x−n<sub>i</sub>) + (v<sub>i</sub>/h − hz<sub>i</sub>/6)(n<sub>i+1</sub>−x).
     Stan solves the system with a dense solve. Here it is solved with the Thomas algorithm, which gives the same solution.
     In the paper the knot values are fitted in Stan using binned Gaia star counts for the sky track and individual stars for distance and velocity.</p>
-  <h2>From the track to the masses</h2>
-  <p>The curve shows the present-day centreline. After correction for the Sun’s motion, the study’s proper motions show southern stars moving across the track.
-    The two proper-motion components are omitted here.
-    The masses come from a separate model fitted to the full 6-D track. It simulates tidal stripping from a progenitor and includes the Milky Way’s motion in response to the LMC.
-    The paper reports these enclosed masses for its preferred oblate Milky Way halo model.</p>
-  <dl class="results">
-    <dt>Milky Way</dt><dd>(2.85 ± 0.1) × 10¹¹ M☉ enclosed within 32.4 kpc</dd>
-    <dt>LMC</dt><dd>(7.02 ± 0.9) × 10¹⁰ M☉ enclosed within 32.8 kpc</dd>
-  </dl>
-</section>
+</details>
+</main>
+
+<aside id="hint-spline" class="term-panel" popover="auto" role="region" aria-labelledby="hint-spline-title">
+  <h3 id="hint-spline-title">Natural cubic spline</h3>
+  <p>A curve made from cubic pieces that meet with matching slopes and second derivatives. Here it reconstructs the published stream measurements between knots. Natural means the second derivative is zero at the two ends; the endpoint slopes need not be zero.</p>
+  <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.CubicSpline.html" target="_blank" rel="noopener noreferrer">SciPy: cubic splines<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-spline" popovertargetaction="hide" aria-label="Close Natural cubic spline hint">Close</button>
+</aside>
+<aside id="hint-stream" class="term-panel" popover="auto" role="region" aria-labelledby="hint-stream-title">
+  <h3 id="hint-stream-title">Orphan–Chenab stream</h3>
+  <p>A trail of stars spread around the Milky Way, likely left by a disrupted dwarf galaxy. This is the real dataset behind our example: splines summarize its measured track, distance and velocity before a separate physical model is used to study galaxy masses.</p>
+  <a href="https://arxiv.org/abs/2211.04495" target="_blank" rel="noopener noreferrer">Read the original stream study<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-stream" popovertargetaction="hide" aria-label="Close Orphan–Chenab stream hint">Close</button>
+</aside>
+<aside id="hint-radial" class="term-panel" popover="auto" role="region" aria-labelledby="hint-radial-title">
+  <h3 id="hint-radial-title">Radial velocity</h3>
+  <p>The part of a star’s motion along our line of sight, rather than across the sky. In this walkthrough it is the vertical quantity of the worked spline, measured in km/s. It is one component of motion, not the star’s full speed.</p>
+  <a href="https://en.wikipedia.org/wiki/Radial_velocity" target="_blank" rel="noopener noreferrer">Wikipedia: radial velocity<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-radial" popovertargetaction="hide" aria-label="Close Radial velocity hint">Close</button>
+</aside>
+<aside id="hint-phi" class="term-panel" popover="auto" role="region" aria-labelledby="hint-phi-title">
+  <h3 id="hint-phi-title">Position along the stream, φ₁</h3>
+  <p>An angular coordinate chosen to run along the stellar trail. Think of it as the x-axis location of a measurement. Moving the selector changes where we evaluate the spline; it does not advance time or move a star along an orbit.</p>
+  <a href="https://arxiv.org/html/2211.04495v2#S3.SS1" target="_blank" rel="noopener noreferrer">Study: stream coordinates<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-phi" popovertargetaction="hide" aria-label="Close Position along the stream, φ₁ hint">Close</button>
+</aside>
+<aside id="hint-gsr" class="term-panel" popover="auto" role="region" aria-labelledby="hint-gsr-title">
+  <h3 id="hint-gsr-title">Galactic standard of rest</h3>
+  <p>Our Sun moves around the Galaxy too. This velocity convention corrects for the component of that solar motion along the viewing direction. The velocity spline and the map’s colour scale use this corrected quantity, often written v_gsr.</p>
+  <a href="https://docs.astropy.org/en/stable/coordinates/example_gallery_rv_to_gsr.html" target="_blank" rel="noopener noreferrer">Astropy: the GSR correction<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-gsr" popovertargetaction="hide" aria-label="Close Galactic standard of rest hint">Close</button>
+</aside>
+<aside id="hint-knots" class="term-panel" popover="auto" role="region" aria-labelledby="hint-knots-title">
+  <h3 id="hint-knots-title">Spline knots</h3>
+  <p>The positions where the polynomial pieces meet. Each knot here has a value fitted by the researchers and released with the study. Our curve passes through those values; a knot is not necessarily one observed star. The sandbox uses separate, invented knot values.</p>
+  <a href="https://en.wikipedia.org/wiki/Spline_(mathematics)" target="_blank" rel="noopener noreferrer">Wikipedia: splines and knots<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-knots" popovertargetaction="hide" aria-label="Close Spline knots hint">Close</button>
+</aside>
+<aside id="hint-percentiles" class="term-panel" popover="auto" role="region" aria-labelledby="hint-percentiles-title">
+  <h3 id="hint-percentiles-title">Posterior percentiles</h3>
+  <p>A summary of uncertainty from the researchers’ statistical fit. These two percentiles enclose the middle 68% of the posterior distribution for an individual knot value. The bars belong to the knots; they do not tell us the uncertainty everywhere along the interpolated curve.</p>
+  <a href="https://en.wikipedia.org/wiki/Credible_interval" target="_blank" rel="noopener noreferrer">Wikipedia: credible intervals<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-percentiles" popovertargetaction="hide" aria-label="Close Posterior percentiles hint">Close</button>
+</aside>
+<aside id="hint-derivative" class="term-panel" popover="auto" role="region" aria-labelledby="hint-derivative-title">
+  <h3 id="hint-derivative-title">Second derivative</h3>
+  <p>The rate at which a curve’s slope changes. Our solver finds this quantity at every knot, calling it z. Once those values are known, the cubic pieces can be reconstructed. Changing one sandbox knot can therefore affect the bending of neighboring pieces.</p>
+  <a href="https://en.wikipedia.org/wiki/Second_derivative" target="_blank" rel="noopener noreferrer">Wikipedia: second derivatives<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-derivative" popovertargetaction="hide" aria-label="Close Second derivative hint">Close</button>
+</aside>
+<aside id="hint-natural" class="term-panel" popover="auto" role="region" aria-labelledby="hint-natural-title">
+  <h3 id="hint-natural-title">Natural boundary conditions</h3>
+  <p>The extra rules that finish specifying this spline: set the second derivative to zero at both outer knots. These rules select one curve from the possible interpolants. They do not force a horizontal tangent or justify extending the curve beyond the measured range.</p>
+  <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.CubicSpline.html" target="_blank" rel="noopener noreferrer">SciPy: spline boundary conditions<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-natural" popovertargetaction="hide" aria-label="Close Natural boundary conditions hint">Close</button>
+</aside>
+<aside id="hint-tridiagonal" class="term-panel" popover="auto" role="region" aria-labelledby="hint-tridiagonal-title">
+  <h3 id="hint-tridiagonal-title">Tridiagonal system</h3>
+  <p>A matrix whose nonzero entries lie only on the main diagonal and the two beside it. Our smoothness equation connects a knot’s second derivative to its immediate neighbors, which produces exactly this structure and lets us avoid a general dense solve.</p>
+  <a href="https://en.wikipedia.org/wiki/Tridiagonal_matrix" target="_blank" rel="noopener noreferrer">Wikipedia: tridiagonal matrices<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-tridiagonal" popovertargetaction="hide" aria-label="Close Tridiagonal system hint">Close</button>
+</aside>
+<aside id="hint-thomas" class="term-panel" popover="auto" role="region" aria-labelledby="hint-thomas-title">
+  <h3 id="hint-thomas-title">Thomas algorithm</h3>
+  <p>A specialized elimination method for a tridiagonal system. Here it first sweeps forward to remove lower-diagonal terms, then works backward to recover the knot second derivatives. It solves the same spline equations as the original dense solve, with work proportional to the number of knots.</p>
+  <a href="https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm" target="_blank" rel="noopener noreferrer">Wikipedia: the Thomas algorithm<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-thomas" popovertargetaction="hide" aria-label="Close Thomas algorithm hint">Close</button>
+</aside>
+<aside id="hint-distance" class="term-panel" popover="auto" role="region" aria-labelledby="hint-distance-title">
+  <h3 id="hint-distance-title">Distance modulus</h3>
+  <p>The difference between apparent and absolute magnitude: how bright a star looks, compared with how bright it would look from 10 parsecs away, on a logarithmic scale. The published distance knots use this quantity. We evaluate its spline first, then convert to kiloparsecs to place the stream in the 3-D map.</p>
+  <a href="https://en.wikipedia.org/wiki/Distance_modulus" target="_blank" rel="noopener noreferrer">Wikipedia: distance modulus<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-distance" popovertargetaction="hide" aria-label="Close Distance modulus hint">Close</button>
+</aside>
+<aside id="hint-kpc" class="term-panel" popover="auto" role="region" aria-labelledby="hint-kpc-title">
+  <h3 id="hint-kpc-title">Kiloparsec (kpc)</h3>
+  <p>A distance unit equal to 1,000 parsecs, or about 3,260 light-years. The map uses it because galactic distances are enormous. The distance readout measures from the Sun, whereas the 3-D coordinate system is centered on the Galaxy.</p>
+  <a href="https://en.wikipedia.org/wiki/Parsec" target="_blank" rel="noopener noreferrer">Wikipedia: parsecs and kiloparsecs<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-kpc" popovertargetaction="hide" aria-label="Close Kiloparsec (kpc) hint">Close</button>
+</aside>
+<aside id="hint-galactocentric" class="term-panel" popover="auto" role="region" aria-labelledby="hint-galactocentric-title">
+  <h3 id="hint-galactocentric-title">Galactocentric coordinates</h3>
+  <p>Coordinates centered on the Milky Way rather than on the Sun. Our 3-D plot uses this frame to place the stream and galaxies together. The gold sightline still starts at the Sun, so its length is a Sun-to-stream distance.</p>
+  <a href="https://docs.astropy.org/en/stable/coordinates/galactocentric.html" target="_blank" rel="noopener noreferrer">Astropy: the Galactocentric frame<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-galactocentric" popovertargetaction="hide" aria-label="Close Galactocentric coordinates hint">Close</button>
+</aside>
+<aside id="hint-rrlyrae" class="term-panel" popover="auto" role="region" aria-labelledby="hint-rrlyrae-title">
+  <h3 id="hint-rrlyrae-title">RR Lyrae stars</h3>
+  <p>Pulsating stars whose brightness behavior helps astronomers estimate their true luminosity and therefore their distance. They supply the distance tracers in this study. The shaded gap marks a region with no likely RR Lyrae members; a smooth curve across it is interpolation.</p>
+  <a href="https://science.nasa.gov/missions/hubble/hubble-spies-stellar-time-capsule-with-cosmic-distance-markers/" target="_blank" rel="noopener noreferrer">NASA: RR Lyrae distance markers<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-rrlyrae" popovertargetaction="hide" aria-label="Close RR Lyrae stars hint">Close</button>
+</aside>
+<aside id="hint-tidal" class="term-panel" popover="auto" role="region" aria-labelledby="hint-tidal-title">
+  <h3 id="hint-tidal-title">Tidal stripping</h3>
+  <p>Gravity pulls with different strengths across a small galaxy. Over time, some stars can escape and spread into a trail. That is the physical origin being illustrated here; drawing a spline through today’s measurements does not simulate that stripping history.</p>
+  <a href="https://en.wikipedia.org/wiki/Tidal_force" target="_blank" rel="noopener noreferrer">Wikipedia: tidal forces<span class="visually-hidden"> (opens in a new tab)</span></a>
+  <button class="hint-close" type="button" popovertarget="hint-tidal" popovertargetaction="hide" aria-label="Close Tidal stripping hint">Close</button>
+</aside>
 
 <footer class="wrap note">
   <p>Paper: S. E. Koposov, D. Erkal, T. S. Li et al. (S5 Collaboration), MNRAS 521, 4936–4962 (2023),
@@ -93,5 +424,10 @@
 <script src="js/plots.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/main.js"></script>
+<script src="js/lesson-model.js"></script>
+<script src="js/lesson.js"></script>
+<script src="js/hints.js"></script>
+<script src="js/translations-pt.js"></script>
+<script src="js/language.js"></script>
 </body>
 </html>

@@ -4,6 +4,9 @@ An interactive 3-D page that rebuilds the **natural cubic splines** behind the S
 Orphan-Chenab stream from the knot values the authors released. A JavaScript port of their Stan
 spline code evaluates every spline live in the browser.
 
+- **Live site:** https://eduardo-machado-behling.github.io/Orphan-Chenab-Spline/
+- **Slides (PDF, pt-BR):** [slides/ligando-as-estrelas.pdf](slides/ligando-as-estrelas.pdf)
+
 ## The problem
 
 The Orphan-Chenab (OC) stream is tidal debris from a likely dwarf galaxy, traced over about 200° of
